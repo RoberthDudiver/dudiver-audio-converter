@@ -232,22 +232,31 @@ class BatchApp(ctk.CTk):
                      text_color="white").pack(side="left", padx=16, pady=10)
 
         # ── Botones — pack desde el FONDO primero para que siempre sean visibles ──
-        btn_row = ctk.CTkFrame(self, fg_color="transparent")
-        btn_row.pack(fill="x", padx=PAD, pady=(8, PAD), side="bottom")
-        btn_row.grid_columnconfigure(0, weight=1)
-        btn_row.grid_columnconfigure(1, weight=1)
+        self._btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        self._btn_row.pack(fill="x", padx=PAD, pady=(8, PAD), side="bottom")
+        self._btn_row.grid_columnconfigure(0, weight=1)
+        self._btn_row.grid_columnconfigure(1, weight=1)
+        self._btn_row.grid_columnconfigure(2, weight=1)
 
         self._btn_left = ctk.CTkButton(
-            btn_row, text="✕  Cerrar", command=self.destroy,
+            self._btn_row, text="✕  Cerrar", command=self.destroy,
             fg_color="#374151", hover_color="#4b5563",
             height=42, font=ctk.CTkFont(size=13))
         self._btn_left.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
         self._btn_right = ctk.CTkButton(
-            btn_row, text="▶  Iniciar conversión", command=self._start_batch,
+            self._btn_row, text="▶  Iniciar conversión", command=self._start_batch,
             fg_color="#2563eb", hover_color="#1d4ed8",
             height=42, font=ctk.CTkFont(size=13, weight="bold"))
-        self._btn_right.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self._btn_right.grid(row=0, column=1, sticky="ew", padx=(6, 6))
+
+        # Tercer botón — oculto hasta que termina la conversión
+        self._btn_new = ctk.CTkButton(
+            self._btn_row, text="📁  Otra carpeta", command=self._new_folder,
+            fg_color="#6d28d9", hover_color="#5b21b6",
+            height=42, font=ctk.CTkFont(size=13))
+        self._btn_new.grid(row=0, column=2, sticky="ew", padx=(6, 0))
+        self._btn_new.grid_remove()   # oculto al inicio
 
         # ── Info carpeta ──────────────────────────────────────────────
         info = ctk.CTkFrame(self)
@@ -257,9 +266,9 @@ class BatchApp(ctk.CTk):
         # Carpeta
         ctk.CTkLabel(info, text="Carpeta:", font=ctk.CTkFont(size=11),
                      text_color="gray").grid(row=0, column=0, sticky="w", padx=10, pady=(8, 3))
-        ctk.CTkLabel(info, text=str(self.src_folder), font=ctk.CTkFont(size=11),
-                     anchor="w", text_color="white").grid(
-                         row=0, column=1, sticky="ew", padx=6, pady=(8, 3))
+        self._lbl_folder = ctk.CTkLabel(info, text=str(self.src_folder),
+                     font=ctk.CTkFont(size=11), anchor="w", text_color="white")
+        self._lbl_folder.grid(row=0, column=1, sticky="ew", padx=6, pady=(8, 3))
 
         # Formato — selector desplegable
         ctk.CTkLabel(info, text="Formato:", font=ctk.CTkFont(size=11),
@@ -339,6 +348,7 @@ class BatchApp(ctk.CTk):
         self._lbl_dest.configure(text=str(self.out_dir))
 
         # Cambiar estado de botones
+        self._btn_new.grid_remove()
         self._btn_right.configure(state="disabled", text="⏳  Convirtiendo…",
                                   fg_color="#374151", hover_color="#374151")
         self._btn_left.configure(text="✕  Cancelar", command=self._cancel,
@@ -400,10 +410,11 @@ class BatchApp(ctk.CTk):
                 text=f"⚠️  {done} OK · {errors} errores de {total} archivos",
                 text_color="#f59e0b")
         self._btn_left.configure(text="✕  Cerrar", command=self.destroy,
-                                 fg_color="#374151", hover_color="#4b5563")
-        self._btn_right.configure(state="normal", text="📂  Abrir carpeta de salida",
+                                 fg_color="#374151", hover_color="#4b5563", state="normal")
+        self._btn_right.configure(state="normal", text="📂  Abrir carpeta",
                                   command=self._open_out,
                                   fg_color="#15803d", hover_color="#166534")
+        self._btn_new.grid()   # mostrar botón "Otra carpeta"
 
     def _cancel(self):
         self.cancelled = True
@@ -411,6 +422,63 @@ class BatchApp(ctk.CTk):
 
     def _open_out(self):
         os.startfile(str(self.out_dir))
+
+    def _new_folder(self):
+        """Selecciona una nueva carpeta y reinicia la ventana sin cerrarla."""
+        folder = filedialog.askdirectory(title="Seleccionar otra carpeta de audio")
+        if not folder:
+            return
+
+        # Resetear estado interno
+        self.src_folder  = Path(folder)
+        self.cancelled   = False
+        self._running    = False
+        self.out_dir     = None
+
+        self.files = sorted(
+            [f for f in self.src_folder.iterdir()
+             if f.is_file() and f.suffix.lower() in AUDIO_EXTS],
+            key=lambda x: x.name.lower()
+        )
+
+        if not self.files:
+            messagebox.showinfo("Sin archivos",
+                "No se encontraron archivos de audio en esa carpeta.")
+            return
+
+        # Actualizar etiquetas
+        self._lbl_folder.configure(text=str(self.src_folder))
+        self._update_dest()
+        self._prog_bar.set(0)
+        self._lbl_prog.configure(
+            text=f"0 / {len(self.files)} archivos", text_color="gray")
+
+        # Reconstruir lista de archivos
+        for w in self._scroll.winfo_children():
+            w.destroy()
+        self._rows = []
+        for i, f in enumerate(self.files):
+            row_frame = ctk.CTkFrame(self._scroll,
+                                     fg_color="#1e293b" if i % 2 == 0 else "#0f172a",
+                                     corner_radius=4)
+            row_frame.pack(fill="x", pady=1)
+            row_frame.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(row_frame, text=f.name, anchor="w",
+                         font=ctk.CTkFont(size=11)).grid(
+                             row=0, column=0, sticky="ew", padx=8, pady=3)
+            lbl_status = ctk.CTkLabel(row_frame, text="⏳ Pendiente",
+                                      text_color=self.COLORS["pending"],
+                                      font=ctk.CTkFont(size=10), width=130, anchor="e")
+            lbl_status.grid(row=0, column=1, padx=8, pady=3)
+            self._rows.append({"status": lbl_status})
+
+        # Resetear botones al estado inicial
+        self._fmt_menu.configure(state="normal")
+        self._btn_new.grid_remove()
+        self._btn_left.configure(text="✕  Cerrar", command=self.destroy,
+                                 fg_color="#374151", hover_color="#4b5563", state="normal")
+        self._btn_right.configure(text="▶  Iniciar conversión", command=self._start_batch,
+                                  fg_color="#2563eb", hover_color="#1d4ed8", state="normal")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
