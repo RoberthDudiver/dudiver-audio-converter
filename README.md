@@ -50,18 +50,31 @@ No windows to open. No dragging files. Just right-click → convert.
 
 ### How to Use
 
+#### Convert a single file
+
 1. **Download** the installer from [Releases](../../releases) and run it.
 2. **Right-click** any audio file (MP3, WAV, FLAC, OGG, M4A, AIFF, WMA, OPUS, AAC, APE, MKA).
+3. On **Windows 11** → click **"Show more options"** first (or press `Shift + F10`).
+4. **Hover** over **"Dudiver Music Audio Converter"**.
+5. **Select** the target format from the submenu.
+6. A balloon notification appears: **"Converting…"** then **"Done ✅"**.
+7. The converted file appears in the **same folder**, auto-numbered if the name already exists (`song.flac`, `song 1.flac`, `song 2.flac`…).
+
+#### Convert an entire folder (batch mode)
+
+1. **Right-click** any folder that contains audio files.
+2. On **Windows 11** → click **"Show more options"**.
 3. **Hover** over **"Dudiver Music Audio Converter"**.
 4. **Select** the target format.
-5. A balloon notification appears: **"Converting…"** and then **"Done ✅"**.
-6. The converted file appears in the **same folder**, auto-numbered if the name already exists (`song.flac`, `song 1.flac`, `song 2.flac`…).
+5. A window opens showing all audio files found. Click **Start**.
+6. Output is saved to a new sibling folder named **`Folder Name [FORMAT]`** (e.g. `Albums [FLAC]`).
+   If that folder already exists, it's auto-numbered: `Albums [FLAC] 1`, `Albums [FLAC] 2`…
 
 ### Installation
 
 **Option A — Installer (recommended)**
 
-Download `DudiverMusicAudioConverter_Setup.exe` from [Releases](../../releases) and run it. The installer registers the context menu automatically.
+Download `DudiverMusicAudioConverter_Setup.exe` from [Releases](../../releases) and run it. No admin required. The context menu is registered automatically.
 
 **Option B — PowerShell (no admin needed)**
 
@@ -72,11 +85,13 @@ powershell -ExecutionPolicy Bypass -File install_user.ps1
 
 ### Uninstall
 
-```powershell
-powershell -ExecutionPolicy Bypass -File uninstall_user.ps1
-```
+Use **Control Panel → Programs → Uninstall a program** and select **Dudiver Music Audio Converter**.
 
-Or use **Add/Remove Programs** if you used the installer.
+Or via PowerShell (manual install only):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File uninstall.ps1
+```
 
 ### Build from Source
 
@@ -116,18 +131,31 @@ Sin abrir programas. Sin arrastrar archivos. Solo click derecho → convertir.
 
 ### Cómo Usar
 
+#### Convertir un archivo
+
 1. **Descarga** el instalador desde [Releases](../../releases) y ejecútalo.
 2. **Click derecho** en cualquier archivo de audio (MP3, WAV, FLAC, OGG, M4A, AIFF, WMA, OPUS, AAC, APE, MKA).
+3. En **Windows 11** → haz click en **"Mostrar más opciones"** (o presiona `Shift + F10`).
+4. **Pasa el cursor** sobre **"Dudiver Music Audio Converter"**.
+5. **Elige** el formato de destino en el submenú.
+6. Aparece una notificación: **"Convirtiendo…"** y luego **"Listo ✅"**.
+7. El archivo convertido aparece en la **misma carpeta**, con numeración automática si el nombre ya existe (`cancion.flac`, `cancion 1.flac`, `cancion 2.flac`…).
+
+#### Convertir una carpeta entera (modo lote)
+
+1. **Click derecho** en una carpeta que contenga archivos de audio.
+2. En **Windows 11** → haz click en **"Mostrar más opciones"**.
 3. **Pasa el cursor** sobre **"Dudiver Music Audio Converter"**.
 4. **Elige** el formato de destino.
-5. Aparece una notificación: **"Convirtiendo…"** y luego **"Listo ✅"**.
-6. El archivo convertido aparece en la **misma carpeta**, con numeración automática si el nombre ya existe (`cancion.flac`, `cancion 1.flac`, `cancion 2.flac`…).
+5. Se abre una ventana con todos los archivos encontrados. Haz click en **Iniciar**.
+6. El resultado se guarda en una carpeta nueva junto a la original llamada **`Nombre [FORMATO]`** (ej: `Álbumes [FLAC]`).
+   Si esa carpeta ya existe, se numera automáticamente: `Álbumes [FLAC] 1`, `Álbumes [FLAC] 2`…
 
 ### Instalación
 
 **Opción A — Instalador (recomendado)**
 
-Descarga `DudiverMusicAudioConverter_Setup.exe` desde [Releases](../../releases) y ejecútalo.
+Descarga `DudiverMusicAudioConverter_Setup.exe` desde [Releases](../../releases) y ejecútalo. No requiere administrador. El menú contextual se registra automáticamente.
 
 **Opción B — PowerShell (sin admin)**
 
@@ -137,8 +165,12 @@ powershell -ExecutionPolicy Bypass -File install_user.ps1
 
 ### Desinstalar
 
+Usa **Panel de Control → Programas → Desinstalar un programa** y selecciona **Dudiver Music Audio Converter**.
+
+O vía PowerShell (solo instalación manual):
+
 ```powershell
-powershell -ExecutionPolicy Bypass -File uninstall_user.ps1
+powershell -ExecutionPolicy Bypass -File uninstall.ps1
 ```
 
 ---

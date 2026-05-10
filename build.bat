@@ -12,10 +12,10 @@ echo.
 python --version >nul 2>&1
 if errorlevel 1 ( echo [ERROR] Python no encontrado. & pause & exit /b 1 )
 
-echo [1/3] Instalando dependencias...
+echo [1/4] Instalando dependencias...
 pip install customtkinter pyinstaller --quiet --upgrade
 
-echo [2/3] Compilando DudiverConverter.exe...
+echo [2/4] Compilando DudiverConverter.exe...
 if exist "build" rmdir /s /q "build" >nul 2>&1
 if exist "DudiverConverter.spec" del "DudiverConverter.spec" >nul 2>&1
 
@@ -25,9 +25,19 @@ pyinstaller --onefile --noconsole ^
     --collect-all=customtkinter ^
     converter.py
 
-if errorlevel 1 ( echo [ERROR] PyInstaller fallo. & pause & exit /b 1 )
+if errorlevel 1 ( echo [ERROR] PyInstaller fallo en converter.py. & pause & exit /b 1 )
 
-echo [3/3] Copiando ffmpeg.exe...
+echo [3/4] Compilando DudiverInstaller.exe (con UAC admin)...
+if exist "DudiverInstaller.spec" del "DudiverInstaller.spec" >nul 2>&1
+
+pyinstaller --onefile --console ^
+    --name=DudiverInstaller ^
+    --uac-admin ^
+    installer.py
+
+if errorlevel 1 ( echo [ERROR] PyInstaller fallo en installer.py. & pause & exit /b 1 )
+
+echo [4/4] Copiando ffmpeg.exe...
 if exist "ffmpeg.exe" (
     copy /Y "ffmpeg.exe" "dist\ffmpeg.exe" >nul
 ) else (
@@ -43,9 +53,11 @@ echo.
 echo ============================================
 echo   Build completado!
 echo   Archivos en: dist\
-echo     - DudiverConverter.exe
+echo     - DudiverConverter.exe   (la app)
+echo     - DudiverInstaller.exe   (el instalador, pide UAC solo)
 echo     - ffmpeg.exe
 echo.
-echo   Para instalar: compila installer.iss con Inno Setup 6
+echo   Para instalar: doble clic en DudiverInstaller.exe
+echo   Windows pedira UAC -> Aceptar -> listo.
 echo ============================================
 pause
