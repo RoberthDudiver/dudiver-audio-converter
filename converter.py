@@ -151,7 +151,7 @@ class BatchApp(ctk.CTk):
 
     COLORS = {"pending":"#6b7280", "converting":"#3b82f6",
                "done":"#22c55e",   "error":"#ef4444"}
-    W, H = 660, 540
+    W, H = 700, 600
 
     def __init__(self, folder: str, format_key: str):
         super().__init__()
@@ -159,12 +159,11 @@ class BatchApp(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         self.src_folder  = Path(folder)
-        self.format_key  = format_key
-        self.fmt         = FORMATS[format_key]
-        self.fmt_display = DISPLAY_NAMES[format_key][0]
+        self.current_fmt = format_key
         self.ffmpeg      = find_ffmpeg()
         self.cancelled   = False
-        self._lock       = threading.Lock()
+        self._running    = False
+        self.out_dir     = None
 
         # Archivos de audio en la carpeta (no recursivo)
         self.files: list[Path] = sorted(
@@ -173,16 +172,13 @@ class BatchApp(ctk.CTk):
             key=lambda x: x.name.lower()
         )
 
-        # Carpeta de salida  → "Nombre [FLAC]"  auto-numerada si existe
-        out_name = f"{self.src_folder.name} [{self.fmt_display}]"
-        self.out_dir = auto_name_dir(self.src_folder.parent, out_name)
-        self.out_dir.mkdir(parents=True, exist_ok=True)
-
         self.title("Dudiver Music Audio Converter")
         self.geometry(f"{self.W}x{self.H}")
-        self.resizable(False, False)
+        self.minsize(560, 480)
+        self.resizable(True, True)
 
         self._build()
+        self._update_dest()
         self._center()
         self.lift(); self.focus_force()
         self.attributes("-topmost", True)
@@ -198,7 +194,26 @@ class BatchApp(ctk.CTk):
                 "No se encontraron archivos de audio en la carpeta seleccionada.")
             self.destroy(); return
 
-        self.after(300, self._start_batch)
+    # ── helpers de formato ─────────────────────────────────────────────────────
+    @staticmethod
+    def _key_to_option(key: str) -> str:
+        return f"{DISPLAY_NAMES[key][0]}  —  {FORMATS[key]['label']}"
+
+    @staticmethod
+    def _option_to_key(option: str) -> str:
+        for k in FORMATS:
+            if BatchApp._key_to_option(k) == option:
+                return k
+        return "FLAC"
+
+    def _update_dest(self, *_):
+        disp = DISPLAY_NAMES[self.current_fmt][0]
+        preview = self.src_folder.parent / f"{self.src_folder.name} [{disp}]"
+        self._lbl_dest.configure(text=str(preview))
+
+    def _on_fmt_change(self, selection: str):
+        self.current_fmt = self._option_to_key(selection)
+        self._update_dest()
 
     def _center(self):
         self.update_idletasks()
@@ -211,44 +226,83 @@ class BatchApp(ctk.CTk):
 
         # ── Cabecera ──────────────────────────────────────────────────
         hdr = ctk.CTkFrame(self, fg_color="#1c3a5e", corner_radius=0)
-        hdr.pack(fill="x")
+        hdr.pack(fill="x", side="top")
         ctk.CTkLabel(hdr, text="🎵  Dudiver Music Audio Converter · Conversión en lote",
                      font=ctk.CTkFont(size=15, weight="bold"),
                      text_color="white").pack(side="left", padx=16, pady=10)
 
+        # ── Botones — pack desde el FONDO primero para que siempre sean visibles ──
+        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        btn_row.pack(fill="x", padx=PAD, pady=(8, PAD), side="bottom")
+        btn_row.grid_columnconfigure(0, weight=1)
+        btn_row.grid_columnconfigure(1, weight=1)
+
+        self._btn_left = ctk.CTkButton(
+            btn_row, text="✕  Cerrar", command=self.destroy,
+            fg_color="#374151", hover_color="#4b5563",
+            height=42, font=ctk.CTkFont(size=13))
+        self._btn_left.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+
+        self._btn_right = ctk.CTkButton(
+            btn_row, text="▶  Iniciar conversión", command=self._start_batch,
+            fg_color="#2563eb", hover_color="#1d4ed8",
+            height=42, font=ctk.CTkFont(size=13, weight="bold"))
+        self._btn_right.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
         # ── Info carpeta ──────────────────────────────────────────────
         info = ctk.CTkFrame(self)
-        info.pack(fill="x", padx=PAD, pady=(PAD, 0))
+        info.pack(fill="x", padx=PAD, pady=(PAD, 0), side="top")
         info.grid_columnconfigure(1, weight=1)
 
+        # Carpeta
         ctk.CTkLabel(info, text="Carpeta:", font=ctk.CTkFont(size=11),
-                     text_color="gray").grid(row=0, column=0, sticky="w", padx=10, pady=(8,2))
+                     text_color="gray").grid(row=0, column=0, sticky="w", padx=10, pady=(8, 3))
         ctk.CTkLabel(info, text=str(self.src_folder), font=ctk.CTkFont(size=11),
-                     anchor="w", text_color="white").grid(row=0, column=1, sticky="ew", padx=6, pady=(8,2))
+                     anchor="w", text_color="white").grid(
+                         row=0, column=1, sticky="ew", padx=6, pady=(8, 3))
 
+        # Formato — selector desplegable
         ctk.CTkLabel(info, text="Formato:", font=ctk.CTkFont(size=11),
-                     text_color="gray").grid(row=1, column=0, sticky="w", padx=10, pady=(0,8))
-        ctk.CTkLabel(info, text=f"{self.fmt_display}  →  {self.fmt['label']}",
-                     font=ctk.CTkFont(size=11, weight="bold"),
-                     text_color="#60a5fa").grid(row=1, column=1, sticky="w", padx=6, pady=(0,8))
+                     text_color="gray").grid(row=1, column=0, sticky="w", padx=10, pady=(0, 3))
 
+        fmt_options = [self._key_to_option(k) for k in FORMATS]
+        self._fmt_menu = ctk.CTkOptionMenu(
+            info,
+            values=fmt_options,
+            command=self._on_fmt_change,
+            width=340, height=30,
+            font=ctk.CTkFont(size=11),
+            fg_color="#1e3a5f",
+            button_color="#2563eb",
+            button_hover_color="#1d4ed8",
+            dropdown_font=ctk.CTkFont(size=11),
+        )
+        self._fmt_menu.set(self._key_to_option(self.current_fmt))
+        self._fmt_menu.grid(row=1, column=1, sticky="w", padx=6, pady=(0, 3))
+
+        # Destino
         ctk.CTkLabel(info, text="Destino:", font=ctk.CTkFont(size=11),
-                     text_color="gray").grid(row=2, column=0, sticky="w", padx=10, pady=(0,8))
-        ctk.CTkLabel(info, text=str(self.out_dir), font=ctk.CTkFont(size=11),
-                     anchor="w", text_color="#86efac").grid(row=2, column=1, sticky="ew", padx=6, pady=(0,8))
+                     text_color="gray").grid(row=2, column=0, sticky="w", padx=10, pady=(0, 8))
+        self._lbl_dest = ctk.CTkLabel(info, text="", font=ctk.CTkFont(size=11),
+                                      anchor="w", text_color="#86efac")
+        self._lbl_dest.grid(row=2, column=1, sticky="ew", padx=6, pady=(0, 8))
 
         # ── Progreso global ───────────────────────────────────────────
-        self._lbl_prog = ctk.CTkLabel(self, text=f"0 / {len(self.files)} archivos",
-                                      font=ctk.CTkFont(size=12), text_color="gray")
-        self._lbl_prog.pack(padx=PAD, pady=(PAD, 2), anchor="w")
+        prog_frame = ctk.CTkFrame(self, fg_color="transparent")
+        prog_frame.pack(fill="x", padx=PAD, pady=(PAD, 0), side="top")
 
-        self._prog_bar = ctk.CTkProgressBar(self, height=8)
-        self._prog_bar.pack(fill="x", padx=PAD)
+        self._lbl_prog = ctk.CTkLabel(
+            prog_frame, text=f"0 / {len(self.files)} archivos",
+            font=ctk.CTkFont(size=12), text_color="gray", anchor="w")
+        self._lbl_prog.pack(fill="x", pady=(0, 4))
+
+        self._prog_bar = ctk.CTkProgressBar(prog_frame, height=8)
+        self._prog_bar.pack(fill="x")
         self._prog_bar.set(0)
 
-        # ── Lista de archivos ─────────────────────────────────────────
-        self._scroll = ctk.CTkScrollableFrame(self, height=250)
-        self._scroll.pack(fill="both", expand=True, padx=PAD, pady=(PAD, 0))
+        # ── Lista de archivos — ocupa el espacio restante ─────────────
+        self._scroll = ctk.CTkScrollableFrame(self)
+        self._scroll.pack(fill="both", expand=True, padx=PAD, pady=(PAD, 4))
         self._scroll.grid_columnconfigure(0, weight=1)
 
         self._rows: list[dict] = []
@@ -259,43 +313,42 @@ class BatchApp(ctk.CTk):
             row_frame.pack(fill="x", pady=1)
             row_frame.grid_columnconfigure(0, weight=1)
 
-            lbl_name = ctk.CTkLabel(row_frame, text=f.name, anchor="w",
-                                    font=ctk.CTkFont(size=11))
-            lbl_name.grid(row=0, column=0, sticky="ew", padx=8, pady=3)
+            ctk.CTkLabel(row_frame, text=f.name, anchor="w",
+                         font=ctk.CTkFont(size=11)).grid(
+                             row=0, column=0, sticky="ew", padx=8, pady=3)
 
             lbl_status = ctk.CTkLabel(row_frame, text="⏳ Pendiente",
                                       text_color=self.COLORS["pending"],
                                       font=ctk.CTkFont(size=10), width=130, anchor="e")
             lbl_status.grid(row=0, column=1, padx=8, pady=3)
-
             self._rows.append({"status": lbl_status})
-
-        # ── Botones ───────────────────────────────────────────────────
-        btn_row = ctk.CTkFrame(self, fg_color="transparent")
-        btn_row.pack(fill="x", padx=PAD, pady=PAD)
-        btn_row.grid_columnconfigure(0, weight=1)
-        btn_row.grid_columnconfigure(1, weight=1)
-
-        self.btn_cancel = ctk.CTkButton(btn_row, text="✕  Cancelar",
-                                        command=self._cancel,
-                                        fg_color="#374151", hover_color="#4b5563",
-                                        height=38, font=ctk.CTkFont(size=13))
-        self.btn_cancel.grid(row=0, column=0, sticky="ew", padx=(0,6))
-
-        self.btn_open = ctk.CTkButton(btn_row, text="📂  Abrir carpeta de salida",
-                                      command=self._open_out,
-                                      height=38, font=ctk.CTkFont(size=13),
-                                      state="disabled",
-                                      fg_color="#15803d", hover_color="#166534")
-        self.btn_open.grid(row=0, column=1, sticky="ew", padx=(6,0))
 
     def _set_row(self, idx: int, icon: str, color: str, text: str):
         self._rows[idx]["status"].configure(text=f"{icon} {text}", text_color=color)
 
     def _start_batch(self):
+        if self._running:
+            return
+        self._running = True
+
+        # Crear carpeta de salida ahora que sabemos el formato final
+        disp = DISPLAY_NAMES[self.current_fmt][0]
+        out_name = f"{self.src_folder.name} [{disp}]"
+        self.out_dir = auto_name_dir(self.src_folder.parent, out_name)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self._lbl_dest.configure(text=str(self.out_dir))
+
+        # Cambiar estado de botones
+        self._btn_right.configure(state="disabled", text="⏳  Convirtiendo…",
+                                  fg_color="#374151", hover_color="#374151")
+        self._btn_left.configure(text="✕  Cancelar", command=self._cancel,
+                                 fg_color="#dc2626", hover_color="#b91c1c")
+        self._fmt_menu.configure(state="disabled")
+
         threading.Thread(target=self._worker, daemon=True).start()
 
     def _worker(self):
+        fmt   = FORMATS[self.current_fmt]
         total = len(self.files)
         done  = 0
         errors = 0
@@ -307,10 +360,10 @@ class BatchApp(ctk.CTk):
 
             self.after(0, self._set_row, i, "🔄", self.COLORS["converting"], "Convirtiendo…")
             self.after(0, self._lbl_prog.configure,
-                       {"text": f"{done} / {total} archivos  ·  convirtiendo: {f.name}"})
+                       {"text": f"{done} / {total} archivos  ·  {f.name}"})
 
-            out = auto_name(self.out_dir, f.stem, self.fmt["ext"])
-            cmd = [self.ffmpeg, "-i", str(f), "-y"] + self.fmt["args"] + [str(out)]
+            out = auto_name(self.out_dir, f.stem, fmt["ext"])
+            cmd = [self.ffmpeg, "-i", str(f), "-y"] + fmt["args"] + [str(out)]
             try:
                 r = subprocess.run(cmd, capture_output=True,
                                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess,"CREATE_NO_WINDOW") else 0)
@@ -325,13 +378,14 @@ class BatchApp(ctk.CTk):
                 errors += 1
                 self.after(0, self._set_row, i, "❌", self.COLORS["error"], str(e)[:30])
 
-            pct = (i + 1) / total
-            self.after(0, self._prog_bar.set, pct)
+            self.after(0, self._prog_bar.set, (i + 1) / total)
 
-        # Terminado
         if self.cancelled:
             self.after(0, self._lbl_prog.configure,
-                       {"text": f"Cancelado · {done} de {total} completados"})
+                       {"text": f"Cancelado · {done} de {total} completados", "text_color": "#f59e0b"})
+            self.after(0, self._btn_left.configure,
+                       {"text": "✕  Cerrar", "command": self.destroy,
+                        "fg_color": "#374151", "hover_color": "#4b5563"})
         else:
             self.after(0, self._finish, done, errors, total)
 
@@ -345,12 +399,15 @@ class BatchApp(ctk.CTk):
             self._lbl_prog.configure(
                 text=f"⚠️  {done} OK · {errors} errores de {total} archivos",
                 text_color="#f59e0b")
-        self.btn_cancel.configure(state="disabled")
-        self.btn_open.configure(state="normal")
+        self._btn_left.configure(text="✕  Cerrar", command=self.destroy,
+                                 fg_color="#374151", hover_color="#4b5563")
+        self._btn_right.configure(state="normal", text="📂  Abrir carpeta de salida",
+                                  command=self._open_out,
+                                  fg_color="#15803d", hover_color="#166534")
 
     def _cancel(self):
         self.cancelled = True
-        self.btn_cancel.configure(state="disabled", text="Cancelando…")
+        self._btn_left.configure(state="disabled", text="Cancelando…")
 
     def _open_out(self):
         os.startfile(str(self.out_dir))
